@@ -1,76 +1,72 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { calcPercent } from '../utils';
+import { DEFAULT_SETTINGS } from '../constants';
 
 /**
  * Firestore layout:
- *   users/{uid}                 -> { startDate: 'YYYY-MM-DD' }
- *   users/{uid}/days/{dayNum}   -> { day, tasks: {taskId: bool}, percent, completed, updatedAt }
+ *   users/{uid}                  -> { startDate: 'YYYY-MM-DD', settings: {...targets} }
+ *   users/{uid}/days/{dayNum}    -> { day, metrics, focus, top3, planDone, tasks, percent, completed, updatedAt }
+ *   users/{uid}/reviews/{week}   -> { worked, blocked, change, updatedAt }
  */
 export function useChallenge(uid) {
-  const [startDate, setStartDateState] = useState(null);
+  const [userDoc, setUserDoc] = useState(null);
   const [days, setDays] = useState({});
-  const [ready, setReady] = useState(false);
+  const [reviews, setReviews] = useState({});
+  const [loaded, setLoaded] = useState({ user: false, days: false, reviews: false });
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!uid) return;
-    setReady(false);
-    let settingsLoaded = false;
-    let daysLoaded = false;
-    const check = () => settingsLoaded && daysLoaded && setReady(true);
+    setLoaded({ user: false, days: false, reviews: false });
     const onErr = (e) => setError(e.message);
-
-    const unsubSettings = onSnapshot(
-      doc(db, 'users', uid),
-      (snap) => {
-        setStartDateState(snap.exists() ? snap.data().startDate ?? null : null);
-        settingsLoaded = true;
-        check();
-      },
-      onErr
-    );
-
-    const unsubDays = onSnapshot(
-      collection(db, 'users', uid, 'days'),
-      (snap) => {
-        const map = {};
-        snap.forEach((d) => {
-          map[Number(d.id)] = d.data();
-        });
-        setDays(map);
-        daysLoaded = true;
-        check();
-      },
-      onErr
-    );
-
-    return () => {
-      unsubSettings();
-      unsubDays();
+    const mark = (k) => setLoaded((l) => (l[k] ? l : { ...l, [k]: true }));
+    const toMap = (snap) => {
+      const map = {};
+      snap.forEach((d) => (map[Number(d.id)] = d.data()));
+      return map;
     };
+
+    const unsubs = [
+      onSnapshot(doc(db, 'users', uid), (s) => { setUserDoc(s.exists() ? s.data() : {}); mark('user'); }, onErr),
+      onSnapshot(collection(db, 'users', uid, 'days'), (s) => { setDays(toMap(s)); mark('days'); }, onErr),
+      onSnapshot(collection(db, 'users', uid, 'reviews'), (s) => { setReviews(toMap(s)); mark('reviews'); }, onErr),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, [uid]);
 
-  const setStartDate = useCallback(
-    (iso) => setDoc(doc(db, 'users', uid), { startDate: iso }, { merge: true }),
+  const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(userDoc?.settings || {}) }), [userDoc]);
+
+  const setStartDate = useCallback((iso) => setDoc(doc(db, 'users', uid), { startDate: iso }, { merge: true }), [uid]);
+
+  const saveSettings = useCallback(
+    (next) => setDoc(doc(db, 'users', uid), { settings: next }, { merge: true }),
     [uid]
   );
 
-  // Writes tasks + recomputed percent. `completed` is only changed when passed.
+  // Merges only the fields given, so different parts of the UI never overwrite each other.
   const saveDay = useCallback(
-    (dayNum, tasks, completed) => {
-      const payload = {
-        day: dayNum,
-        tasks,
-        percent: calcPercent(tasks),
-        updatedAt: serverTimestamp(),
-      };
-      if (typeof completed === 'boolean') payload.completed = completed;
-      return setDoc(doc(db, 'users', uid, 'days', String(dayNum)), payload, { merge: true });
-    },
+    (dayNum, fields) =>
+      setDoc(doc(db, 'users', uid, 'days', String(dayNum)), { ...fields, day: dayNum, updatedAt: serverTimestamp() }, { merge: true }),
     [uid]
   );
 
-  return { startDate, days, ready, error, setStartDate, saveDay };
+  const saveReview = useCallback(
+    (week, fields) =>
+      setDoc(doc(db, 'users', uid, 'reviews', String(week)), { ...fields, updatedAt: serverTimestamp() }, { merge: true }),
+    [uid]
+  );
+
+  return {
+    startDate: userDoc?.startDate ?? null,
+    settings,
+    days,
+    reviews,
+    ready: loaded.user && loaded.days && loaded.reviews,
+    error,
+    setStartDate,
+    saveSettings,
+    saveDay,
+    saveReview,
+  };
 }

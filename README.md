@@ -41,17 +41,37 @@ Map of config keys to `.env.local`:
 
 ## How it works
 
-- Day 1 = the start date you pick on first login (change it anytime from the ... menu).
-- Tapping a checkbox autosaves that day's progress. **Complete Day** marks the day finished.
-- A day counts toward your total and streak when it is marked complete **and** hits `PASS_THRESHOLD` (default 100%, set in `src/constants.js`).
-- Today can be edited, past days can be backfilled, future days are locked.
-- Today not being done yet does not break your streak until the day ends.
+Three tabs: **Today** (log the day), **Progress** (65-day grid, hit rates, trend charts), **Review** (weekly review).
+
+### Exact daily rules (all 7 = day passed)
+
+| Task | Pass rule | How it's checked |
+| --- | --- | --- |
+| Protein | Logged protein >= target (default 120 g); optional calories within ±10% | Number entry + quick-add buttons |
+| Exercise | >= 30 min of intentional exercise, any activity | Activity type + minutes |
+| Water | >= 3.0 L | +250 / +500 ml taps |
+| Deep work | One uninterrupted 90-min block on the in-app timer; a pause over 5 min resets it | Timer auto-checks when it finishes |
+| Brain dump | Tomorrow's top 3 tasks all filled in | Shown on tomorrow's Today screen |
+| Sleep | >= 7 h last night | Bedtime + wake-up time |
+| Zero liquid calories | No alcohol or calorie-containing drinks (allowed/banned list shown in-app) | Confirm before bed |
+
+All targets are editable under ⋯ > Settings & targets.
+
+### No-miss rule
+
+- A day only counts if it hits **100%**. There is no partial credit.
+- You can log today, plus yesterday until **12:00 noon** (`GRACE_HOUR` in `src/constants.js`), for late-night logging.
+- After that the day locks. Anything under 100% is recorded as **Missed** (red on the grid, shown in the header) and resets the streak.
+- Locked days keep the result they had, even if you change targets later.
 
 ## Data model
 
 ```
-users/{uid}                -> { startDate: "YYYY-MM-DD" }
-users/{uid}/days/{dayNum}  -> { day, tasks: { macros: true, ... }, percent, completed, updatedAt }
+users/{uid}                -> { startDate, settings: { proteinTarget, calorieTarget, waterTargetMl, exerciseMinutes, deepWorkMinutes, sleepMinHours } }
+users/{uid}/days/{dayNum}  -> { metrics: { protein, calories, waterMl, exerciseMin, exerciseType, bed, wake, noLiquidCal },
+                                focus: { status, startedAt, accMs, pausedAt, topic }, top3: [..3], planDone: [..3],
+                                tasks: { macros, training, water, deepwork, braindump, sleep, nosugar }, percent, completed, updatedAt }
+users/{uid}/reviews/{week} -> { worked, blocked, change, updatedAt }
 ```
 
-To change the checklist, edit `PILLARS` in `src/constants.js`. Percentages adapt automatically.
+The existing `firestore.rules` already covers the new `reviews` collection, so you don't need to change the rules.

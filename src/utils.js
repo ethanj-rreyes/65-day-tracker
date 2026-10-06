@@ -1,17 +1,15 @@
-import { ALL_TASKS, PASS_THRESHOLD, TOTAL_DAYS } from './constants';
+import { ALL_TASKS, GRACE_HOUR, PASS_THRESHOLD, PAUSE_LIMIT_MIN, TOTAL_DAYS } from './constants.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 
-// Local-time YYYY-MM-DD (avoids the UTC off-by-one you get from toISOString()).
-export const toISODate = (d = new Date()) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// ---------- dates ----------
+export const toISODate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 export const parseISODate = (s) => {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(y, m - 1, d);
 };
 
-// Which challenge day is "today"? (1-based; can be <1 before start or >65 after the end)
 export const dayNumberFor = (startISO, now = new Date()) => {
   const start = parseISODate(startISO);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -24,38 +22,152 @@ export const dateForDay = (startISO, n) => {
   return d;
 };
 
-export const formatDate = (d) =>
-  d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+export const formatDate = (d) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+export const formatDuration = (ms) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+};
+
+// ---------- sleep ----------
+// "23:30" -> "07:00" = 7.5 h. Crossing midnight is handled.
+export const sleepHours = (bed, wake) => {
+  if (!bed || !wake) return 0;
+  const toMin = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  let diff = toMin(wake) - toMin(bed);
+  if (diff <= 0) diff += 24 * 60;
+  return Math.round((diff / 60) * 100) / 100;
+};
+
+// ---------- focus timer (pure state transitions) ----------
+const PAUSE_LIMIT_MS = PAUSE_LIMIT_MIN * 60 * 1000;
+export const IDLE_FOCUS = { status: 'idle', startedAt: null, accMs: 0, pausedAt: null };
+
+export const focusElapsed = (f, now) => {
+  if (!f) return 0;
+  return (f.accMs || 0) + (f.status === 'running' && f.startedAt ? now - f.startedAt : 0);
+};
+
+export const focusStart = (f, now) => ({ ...IDLE_FOCUS, topic: f?.topic || '', status: 'running', startedAt: now });
+export const focusPause = (f, now) => ({ ...f, status: 'paused', accMs: focusElapsed(f, now), startedAt: null, pausedAt: now });
+export const focusResume = (f, now) =>
+  now - f.pausedAt > PAUSE_LIMIT_MS
+    ? { ...IDLE_FOCUS, topic: f.topic || '' }
+    : { ...f, status: 'running', startedAt: now, pausedAt: null };
+export const focusReset = (f) => ({ ...IDLE_FOCUS, topic: f?.topic || '' });
+
+// Returns the state the timer *should* be in right now (finished, or expired pause),
+// or null if nothing needs to change.
+export const focusAutoTransition = (f, now, targetMs) => {
+  if (!f) return null;
+  if (f.status === 'running' && focusElapsed(f, now) >= targetMs)
+    return { ...f, status: 'done', accMs: targetMs, startedAt: null, completedAt: now };
+  if (f.status === 'paused' && now - f.pausedAt > PAUSE_LIMIT_MS) return { ...IDLE_FOCUS, topic: f.topic || '', expired: true };
+  return null;
+};
+
+// ---------- task evaluation (the exact rules) ----------
+export function evaluateTasks(day = {}, s) {
+  const m = day.metrics || {};
+  const protein = Number(m.protein) || 0;
+  const calories = Number(m.calories) || 0;
+  const calOk = !s.calorieTarget || (calories > 0 && Math.abs(calories - s.calorieTarget) <= s.calorieTarget * 0.1);
+  const top3 = day.top3 || [];
+  return {
+    macros: protein >= s.proteinTarget && calOk,
+    training: (Number(m.exerciseMin) || 0) >= s.exerciseMinutes,
+    water: (Number(m.waterMl) || 0) >= s.waterTargetMl,
+    deepwork: day.focus?.status === 'done',
+    braindump: top3.length === 3 && top3.every((t) => t && t.trim().length > 0),
+    sleep: sleepHours(m.bed, m.wake) >= s.sleepMinHours,
+    nosugar: m.noLiquidCal === true,
+  };
+}
 
 export const calcPercent = (tasks = {}) => {
   const done = ALL_TASKS.filter((t) => tasks[t.id]).length;
   return Math.round((done / ALL_TASKS.length) * 100);
 };
 
-export const isCounted = (day) => Boolean(day && day.completed && day.percent >= PASS_THRESHOLD);
+export const isPassed = (day) => Boolean(day && day.percent >= PASS_THRESHOLD);
 
-export function computeStats(days, todayNum) {
+// ---------- edit window & day status ----------
+export const canEdit = (n, todayNum, now = new Date()) =>
+  n >= 1 && n <= TOTAL_DAYS && (n === todayNum || (n === todayNum - 1 && now.getHours() < GRACE_HOUR));
+
+// 'passed' | 'pending' (still loggable) | 'missed' | 'future'
+export const dayStatus = (n, day, todayNum, now = new Date()) => {
+  if (isPassed(day)) return 'passed';
+  if (n > todayNum) return 'future';
+  if (canEdit(n, todayNum, now)) return 'pending';
+  return 'missed';
+};
+
+export function computeStats(days, todayNum, now = new Date()) {
   let total = 0;
+  let missed = 0;
   let best = 0;
   let run = 0;
   for (let n = 1; n <= TOTAL_DAYS; n++) {
-    if (isCounted(days[n])) {
+    const st = dayStatus(n, days[n], todayNum, now);
+    if (st === 'passed') {
       total++;
       run++;
       best = Math.max(best, run);
-    } else {
+    } else if (st === 'missed') {
+      missed++;
       run = 0;
     }
   }
-
-  // Current streak: walk back from today. If today isn't done yet (and the
-  // challenge is still running), don't break the streak - start from yesterday.
+  // Current streak: walk back from today. Days still open (pending) don't break it; a missed day does.
   let streak = 0;
-  let cursor = Math.min(todayNum, TOTAL_DAYS);
-  if (cursor >= 1 && !isCounted(days[cursor]) && todayNum <= TOTAL_DAYS) cursor--;
-  while (cursor >= 1 && isCounted(days[cursor])) {
-    streak++;
-    cursor--;
+  for (let n = Math.min(todayNum, TOTAL_DAYS); n >= 1; n--) {
+    const st = dayStatus(n, days[n], todayNum, now);
+    if (st === 'passed') streak++;
+    else if (st === 'pending') continue;
+    else break;
   }
-  return { total, streak, best };
+  return { total, missed, streak, best };
+}
+
+// ---------- weeks ----------
+export const weekOf = (n) => Math.ceil(n / 7);
+export const daysInWeek = (w) => {
+  const out = [];
+  for (let n = 7 * w - 6; n <= Math.min(7 * w, TOTAL_DAYS); n++) out.push(n);
+  return out;
+};
+
+export function weekStats(w, days, todayNum, now = new Date()) {
+  const elapsed = daysInWeek(w).filter((n) => n <= todayNum);
+  const counted = elapsed.filter((n) => dayStatus(n, days[n], todayNum, now) !== 'pending');
+  const taskRates = ALL_TASKS.map((t) => {
+    const hits = counted.filter((n) => days[n]?.tasks?.[t.id]).length;
+    return { id: t.id, label: t.label, hits, of: counted.length, rate: counted.length ? hits / counted.length : 0 };
+  });
+  const avg = (fn) => {
+    const vals = elapsed.map((n) => fn(days[n])).filter((v) => v > 0);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  };
+  const weakest = counted.length ? [...taskRates].sort((a, b) => a.rate - b.rate)[0] : null;
+  return {
+    elapsed: elapsed.length,
+    counted: counted.length,
+    passed: elapsed.filter((n) => isPassed(days[n])).length,
+    missed: counted.filter((n) => !isPassed(days[n])).length,
+    taskRates,
+    weakest: weakest && weakest.rate < 1 ? weakest : null,
+    avgSleep: avg((d) => sleepHours(d?.metrics?.bed, d?.metrics?.wake)),
+    avgWaterL: avg((d) => (Number(d?.metrics?.waterMl) || 0) / 1000),
+    avgProtein: avg((d) => Number(d?.metrics?.protein) || 0),
+    exerciseMin: elapsed.reduce((a, n) => a + (Number(days[n]?.metrics?.exerciseMin) || 0), 0),
+    focusBlocks: elapsed.filter((n) => days[n]?.focus?.status === 'done').length,
+    complete: elapsed.length === daysInWeek(w).length && counted.length === elapsed.length,
+  };
 }

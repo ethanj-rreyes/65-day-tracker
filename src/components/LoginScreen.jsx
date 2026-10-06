@@ -52,7 +52,7 @@ export default function LoginScreen() {
     <div className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <h1 className="text-4xl font-extrabold tracking-tight">
-          65-Day <span className="text-emerald-400">Peak</span>
+          65-Day <span className="text-emerald-400">Challenge</span>
         </h1>
         <p className="mb-8 mt-2 text-slate-400">Physical. Cognitive. Recovery. Every day.</p>
 
