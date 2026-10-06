@@ -22,7 +22,7 @@ export const PILLARS = [
     dot: 'bg-sky-400',
     text: 'text-sky-300',
     tasks: [
-      { id: 'deepwork', label: 'Completed one 90-minute deep work block (CS coursework or BioBytes development)' },
+      { id: 'deepwork', label: 'Completed one 90-minute deep work block' },
       { id: 'braindump', label: 'Wrote down the "Brain Dump" / top 3 tasks for tomorrow' },
     ],
   },
