@@ -2,6 +2,7 @@ import { GRACE_HOUR, TOTAL_DAYS } from '../constants';
 import { dateForDay, dayStatus, formatDate, weekOf } from '../utils';
 import DayEditor from './DayEditor';
 import ProgressRing from './ProgressRing';
+import ScheduleCard from './ScheduleCard';
 
 function timeLeftToday(now) {
   const d = new Date(now);
@@ -10,7 +11,7 @@ function timeLeftToday(now) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-export default function TodayView({ todayNum, startDate, days, reviews, settings, now, onSave, onComplete, onOpenDay, onGoReview }) {
+export default function TodayView({ todayNum, startDate, days, reviews, settings, now, onSave, onComplete, onOpenDay, onGoReview, ctx, calendar }) {
   const today = days[todayNum];
   const yesterday = days[todayNum - 1];
   const percent = today?.percent ?? 0;
@@ -38,7 +39,7 @@ export default function TodayView({ todayNum, startDate, days, reviews, settings
             Day {todayNum} <span className="text-base font-medium text-slate-500">/ {TOTAL_DAYS}</span>
           </h2>
           <p className={`text-sm ${percent === 100 ? 'text-emerald-300' : 'text-amber-200'}`}>
-            {percent === 100 ? 'All 7 done. Day secured.' : `${timeLeftToday(now)} left to hit 100%`}
+            {percent === 100 ? 'Every task done. Day secured.' : `${timeLeftToday(now)} left to hit 100%`}
           </p>
         </div>
       </div>
@@ -78,7 +79,9 @@ export default function TodayView({ todayNum, startDate, days, reviews, settings
         </section>
       )}
 
-      <DayEditor dayNum={todayNum} day={today} settings={settings} editable onSave={onSave} onComplete={onComplete} />
+      <ScheduleCard day={today} settings={settings} now={now} {...calendar} />
+
+      <DayEditor dayNum={todayNum} day={today} settings={settings} editable onSave={onSave} onComplete={onComplete} ctx={ctx} />
     </div>
   );
 }

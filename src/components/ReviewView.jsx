@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TOTAL_WEEKS } from '../constants';
-import { dateForDay, daysInWeek, weekOf, weekStats } from '../utils';
+import { adherence, dateForDay, dayNumberFor, daysInWeek, impulseSpentInWeek, peso, weekOf, weekStats } from '../utils';
 
 const QUESTIONS = [
   ['worked', 'What made the good days work?'],
@@ -17,7 +17,7 @@ function Stat({ label, value }) {
   );
 }
 
-function WeekCard({ w, startDate, days, todayNum, now, review, onSave, defaultOpen }) {
+function WeekCard({ w, startDate, days, todayNum, now, review, onSave, defaultOpen, expenses, wishlist, settings }) {
   const [open, setOpen] = useState(defaultOpen);
   const [form, setForm] = useState({ worked: '', blocked: '', change: '' });
   const [saved, setSaved] = useState(false);
@@ -26,6 +26,14 @@ function WeekCard({ w, startDate, days, todayNum, now, review, onSave, defaultOp
   }, [review]);
 
   const s = weekStats(w, days, todayNum, now);
+  const impulse = impulseSpentInWeek(expenses, w);
+  const savedWeek = wishlist
+    .filter((x) => x.status === 'skipped' && x.decidedAt && weekOf(dayNumberFor(startDate, new Date(x.decidedAt))) === w)
+    .reduce((a, x) => a + (Number(x.price) || 0), 0);
+  const sched = daysInWeek(w)
+    .filter((n) => n <= todayNum)
+    .map((n) => adherence(days[n], settings, now.getTime()))
+    .reduce((a, b) => ({ followed: a.followed + b.followed, total: a.total + b.total }), { followed: 0, total: 0 });
   const dIdx = daysInWeek(w);
   const fmt = (n) => dateForDay(startDate, n).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
@@ -72,6 +80,9 @@ function WeekCard({ w, startDate, days, todayNum, now, review, onSave, defaultOp
             <Stat label="Exercise" value={`${s.exerciseMin} min`} />
             <Stat label="Focus blocks" value={s.focusBlocks} />
             <Stat label="Days passed" value={`${s.passed}/${s.elapsed}`} />
+            <Stat label="Impulse spend" value={`${peso(impulse)} / ${peso(settings.weeklyImpulseBudget)}`} />
+            <Stat label="Saved by skipping" value={peso(savedWeek)} />
+            <Stat label="Schedule followed" value={sched.total ? `${sched.followed}/${sched.total}` : '–'} />
           </div>
 
           <div className="space-y-1.5">
@@ -110,7 +121,7 @@ function WeekCard({ w, startDate, days, todayNum, now, review, onSave, defaultOp
   );
 }
 
-export default function ReviewView({ startDate, days, reviews, todayNum, now, onSave }) {
+export default function ReviewView({ startDate, days, reviews, todayNum, now, onSave, expenses, wishlist, settings }) {
   const current = Math.min(weekOf(Math.max(todayNum, 1)), TOTAL_WEEKS);
   const weeks = Array.from({ length: current }, (_, i) => current - i);
   const lastChange = [...weeks].map((w) => reviews[w]?.change).find((c) => c && c.trim());
@@ -133,6 +144,9 @@ export default function ReviewView({ startDate, days, reviews, todayNum, now, on
           now={now}
           review={reviews[w]}
           onSave={onSave}
+          expenses={expenses}
+          wishlist={wishlist}
+          settings={settings}
           defaultOpen={w === current - 1 || (current === 1 && w === 1)}
         />
       ))}

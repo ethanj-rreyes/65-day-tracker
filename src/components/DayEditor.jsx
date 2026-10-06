@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PILLARS } from '../constants';
 import { IDLE_FOCUS, calcPercent, evaluateTasks } from '../utils';
 import {
+  BudgetInput,
   ExerciseInput,
   FocusTimer,
   NoLiquidCalInput,
@@ -22,15 +23,17 @@ const toDraft = (day) => ({
  * Logs a single day. Every change is auto-saved (debounced) together with the
  * auto-evaluated task results, so the grid and streak update live everywhere.
  */
-export default function DayEditor({ dayNum, day, settings, editable, onSave, onComplete }) {
+export default function DayEditor({ dayNum, day, settings, editable, onSave, onComplete, ctx = {} }) {
   const [draft, setDraft] = useState(() => toDraft(day));
   const latest = useRef(draft);
   const dirty = useRef(false);
   const timer = useRef(null);
   const settingsRef = useRef(settings);
   const saveRef = useRef(onSave);
+  const ctxRef = useRef(ctx);
   settingsRef.current = settings;
   saveRef.current = onSave;
+  ctxRef.current = ctx;
 
   // Take remote updates (e.g. from your other device) when we have no unsaved edits.
   useEffect(() => {
@@ -46,7 +49,7 @@ export default function DayEditor({ dayNum, day, settings, editable, onSave, onC
     if (!dirty.current) return;
     dirty.current = false;
     const d = latest.current;
-    const tasks = evaluateTasks(d, settingsRef.current);
+    const tasks = evaluateTasks(d, settingsRef.current, { budgetOk: ctxRef.current.budgetOk });
     saveRef.current(dayNum, { metrics: d.metrics, top3: d.top3, focus: d.focus, tasks, percent: calcPercent(tasks) });
   }, [dayNum]);
 
@@ -84,7 +87,7 @@ export default function DayEditor({ dayNum, day, settings, editable, onSave, onC
   const setTop3 = useCallback((t) => change({ top3: t }), [change]);
 
   // Open days are scored live; locked days show the result that was saved at the time.
-  const tasks = editable ? evaluateTasks(draft, settings) : day?.tasks || {};
+  const tasks = editable ? evaluateTasks(draft, settings, { budgetOk: ctx.budgetOk }) : day?.tasks || {};
   const percent = editable ? calcPercent(tasks) : day?.percent ?? 0;
   const disabled = !editable;
 
@@ -98,6 +101,7 @@ export default function DayEditor({ dayNum, day, settings, editable, onSave, onC
       case 'braindump': return <Top3Input top3={draft.top3} onChange={setTop3} disabled={disabled} />;
       case 'sleep': return <SleepInput {...props} />;
       case 'nosugar': return <NoLiquidCalInput {...props} />;
+      case 'budget': return <BudgetInput settings={settings} ctx={ctx} disabled={disabled} />;
       default: return null;
     }
   };
@@ -117,7 +121,7 @@ export default function DayEditor({ dayNum, day, settings, editable, onSave, onC
           </h3>
           <div className="space-y-2.5">
             {p.tasks.map((t) => (
-              <TaskCard key={t.id} label={t.label} rule={t.rule(settings)} passed={tasks[t.id]}>
+              <TaskCard key={t.id} label={t.label} rule={t.rule(settings)} passed={t.id === 'budget' && !editable ? day?.tasks?.budget !== false : tasks[t.id]}>
                 {inputFor(t.id)}
               </TaskCard>
             ))}

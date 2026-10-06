@@ -9,6 +9,7 @@ import {
   focusResume,
   focusStart,
   formatDuration,
+  peso,
   sleepHours,
 } from '../utils';
 import ProgressRing from './ProgressRing';
@@ -305,6 +306,30 @@ export function NoLiquidCalInput({ metrics, update, disabled }) {
       >
         {on ? 'Confirmed: zero liquid calories today' : 'Confirm zero liquid calories today'}
       </button>
+    </div>
+  );
+}
+
+// ---------- impulse budget ----------
+export function BudgetInput({ settings, ctx, disabled }) {
+  const spent = ctx?.weekImpulse || 0;
+  const budget = settings.weeklyImpulseBudget;
+  const today = ctx?.todayImpulse || [];
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between text-sm">
+        <span className="text-slate-300">This week: <span className="font-bold tabular-nums">{peso(spent)}</span> / {peso(budget)}</span>
+        <span className={spent > budget ? 'text-rose-300' : 'text-slate-500'}>{spent > budget ? 'over cap' : `${peso(budget - spent)} left`}</span>
+      </div>
+      {today.length > 0 && (
+        <p className="text-xs text-slate-400">Impulse buys today: {today.map((e) => `${e.item} (${peso(e.amount)})`).join(', ')}</p>
+      )}
+      <p className="text-xs text-slate-500">Passes automatically unless you log an impulse buy while over the cap.</p>
+      {!disabled && ctx?.onLogPurchase && (
+        <button onClick={ctx.onLogPurchase} className="h-11 w-full rounded-xl border border-white/10 bg-white/5 text-sm font-semibold">
+          Log a purchase
+        </button>
+      )}
     </div>
   );
 }

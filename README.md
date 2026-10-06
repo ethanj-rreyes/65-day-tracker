@@ -41,7 +41,7 @@ Map of config keys to `.env.local`:
 
 ## How it works
 
-Three tabs: **Today** (log the day), **Progress** (65-day grid, hit rates, trend charts), **Review** (weekly review).
+Four tabs: **Today** (log the day + schedule check-ins), **Progress** (65-day grid, hit rates, trend charts), **Money** (impulse spending), **Review** (weekly review).
 
 ### Exact daily rules (all 7 = day passed)
 
@@ -54,6 +54,7 @@ Three tabs: **Today** (log the day), **Progress** (65-day grid, hit rates, trend
 | Brain dump | Tomorrow's top 3 tasks all filled in | Shown on tomorrow's Today screen |
 | Sleep | >= 7 h last night | Bedtime + wake-up time |
 | Zero liquid calories | No alcohol or calorie-containing drinks (allowed/banned list shown in-app) | Confirm before bed |
+| Impulse budget | Fails only if you log an impulse buy on a day when the week's impulse total is over your cap (default ₱500) | Automatic from the Money tab |
 
 All targets are editable under ⋯ > Settings & targets.
 
@@ -64,6 +65,29 @@ All targets are editable under ⋯ > Settings & targets.
 - After that the day locks. Anything under 100% is recorded as **Missed** (red on the grid, shown in the header) and resets the streak.
 - Locked days keep the result they had, even if you change targets later.
 
+## Google Calendar check-ins (one-time setup)
+
+1. Share your school calendar to the Google account you log in to the app with (Settings and sharing > Share with specific people > "See all event details").
+2. Go to https://console.cloud.google.com and select your Firebase project (same name).
+3. **APIs & Services > Library**: search "Google Calendar API" and click **Enable**.
+4. **Google Auth Platform** (or "OAuth consent screen"):
+   - **Audience**: leave it in *Testing* and add your own email under **Test users**.
+   - **Data access**: click **Add or remove scopes** and add `https://www.googleapis.com/auth/calendar.readonly`. Save.
+5. In the app: Today > **Connect Google Calendar** > pick your calendars. Google will warn that the app isn't verified. That's expected for a personal app: tap **Continue**.
+
+How check-ins work:
+- You can check in from 10 min before an event starts. Checking in more than 15 min after the start counts as **late**; no check-in by the end is **missed**.
+- Events whose titles contain your focus keywords auto check-in when you start the focus timer during them.
+- Events whose titles contain your exercise keywords also need logged exercise minutes of at least 80% of the event length.
+- Google's access lasts about an hour. The app saves the day's events, so you only tap **Refresh** (and maybe approve a quick popup) when your schedule changes.
+
+## Money tab
+
+- **Log a purchase**: amount, item, category, planned vs impulse, and the trigger for impulse buys. The form warns you before an impulse buy that goes over the weekly cap.
+- **Cooling-off list**: add something you want. It unlocks after 24 h (configurable), then you skip it (counted as money saved) or buy it (logged as planned).
+- **Regret check**: 3 days after an impulse buy, the app asks whether it was worth it.
+- **Insights**: total vs impulse spending, money saved, regret rate, and impulse spending by trigger, category and time of day.
+
 ## Data model
 
 ```
@@ -72,6 +96,9 @@ users/{uid}/days/{dayNum}  -> { metrics: { protein, calories, waterMl, exerciseM
                                 focus: { status, startedAt, accMs, pausedAt, topic }, top3: [..3], planDone: [..3],
                                 tasks: { macros, training, water, deepwork, braindump, sleep, nosugar }, percent, completed, updatedAt }
 users/{uid}/reviews/{week} -> { worked, blocked, change, updatedAt }
+users/{uid}/expenses/{id}  -> { amount, item, category, impulse, trigger, at, dayNum, regret }
+users/{uid}/wishlist/{id}  -> { item, price, addedAt, unlockAt, status, decidedAt }
+(day docs also hold calendar: { fetchedAt, events } and checkins: { eventId: time })
 ```
 
-The existing `firestore.rules` already covers the new `reviews` collection, so you don't need to change the rules.
+The existing `firestore.rules` already covers every collection under your user, so you don't need to change the rules.

@@ -19,7 +19,25 @@ export const DEFAULT_SETTINGS = {
   exerciseMinutes: 30,
   deepWorkMinutes: 90,
   sleepMinHours: 7,
+  // Money
+  weeklyImpulseBudget: 500, // pesos per challenge week
+  coolOffHours: 24,
+  // Calendar
+  calendarIds: [], // Google Calendar IDs to read (set in the app)
+  focusKeywords: 'deep work, study, focus, code, coding, review, biobytes',
+  exerciseKeywords: 'gym, run, workout, lift, exercise, training, swim, basketball',
 };
+
+export const CURRENCY = '\u20b1';
+
+// Calendar check-in window: you can check in from 10 min before an event starts;
+// checking in more than 15 min after the start counts as late.
+export const CHECKIN_EARLY_MIN = 10;
+export const CHECKIN_LATE_MIN = 15;
+
+export const EXPENSE_CATEGORIES = ['Food', 'Drinks', 'Transport', 'School', 'Shopping', 'Gaming', 'Subscriptions', 'Going out', 'Other'];
+export const IMPULSE_TRIGGERS = ['Bored', 'Stressed', 'Sale / promo', 'Social media', 'Hungry', 'With friends', 'Reward', 'Tired'];
+export const REGRET_AFTER_DAYS = 3;
 
 export const EXERCISE_TYPES = ['Lift', 'Run', 'Sport', 'Cardio', 'Walk', 'Mobility', 'Other'];
 
@@ -89,6 +107,19 @@ export const PILLARS = [
         id: 'nosugar',
         label: 'Zero liquid calories',
         rule: () => 'No alcohol and no calorie-containing drinks all day (confirm before bed)',
+      },
+    ],
+  },
+  {
+    id: 'money',
+    title: 'Money Discipline',
+    dot: 'bg-amber-400',
+    text: 'text-amber-300',
+    tasks: [
+      {
+        id: 'budget',
+        label: 'Impulse budget',
+        rule: (s) => `No impulse buy today while this week's impulse spending is over ${CURRENCY}${s.weeklyImpulseBudget}`,
       },
     ],
   },

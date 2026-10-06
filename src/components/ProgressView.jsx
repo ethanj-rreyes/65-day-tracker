@@ -1,5 +1,5 @@
 import { ALL_TASKS, TOTAL_DAYS } from '../constants';
-import { dayStatus, sleepHours } from '../utils';
+import { dayStatus, sleepHours, taskHit } from '../utils';
 import DayGrid, { GridLegend } from './DayGrid';
 import TrendChart from './TrendChart';
 
@@ -10,7 +10,7 @@ export default function ProgressView({ days, todayNum, now, settings, onOpen }) 
   const closed = range.filter((n) => dayStatus(n, days[n], todayNum, now) !== 'pending');
 
   const rates = ALL_TASKS.map((t) => {
-    const hits = closed.filter((n) => days[n]?.tasks?.[t.id]).length;
+    const hits = closed.filter((n) => taskHit(days[n], t.id)).length;
     return { ...t, hits, rate: closed.length ? hits / closed.length : 0 };
   });
 

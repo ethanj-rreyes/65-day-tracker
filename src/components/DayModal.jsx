@@ -4,7 +4,7 @@ import { dateForDay, formatDate } from '../utils';
 import DayEditor from './DayEditor';
 import ProgressRing from './ProgressRing';
 
-export default function DayModal({ dayNum, todayNum, startDate, day, settings, status, editable, onSave, onComplete, onClose }) {
+export default function DayModal({ dayNum, todayNum, startDate, day, settings, status, editable, onSave, onComplete, onClose, ctx }) {
   const date = dateForDay(startDate, dayNum);
   const percent = day?.percent ?? 0;
 
@@ -47,7 +47,7 @@ export default function DayModal({ dayNum, todayNum, startDate, day, settings, s
         </div>
         <div className="flex-1 overflow-y-auto px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {banner && <p className={`mb-4 rounded-xl px-4 py-3 text-sm ${banner.cls}`}>{banner.text}</p>}
-          <DayEditor dayNum={dayNum} day={day} settings={settings} editable={editable} onSave={onSave} onComplete={onComplete} />
+          <DayEditor dayNum={dayNum} day={day} settings={settings} editable={editable} onSave={onSave} onComplete={onComplete} ctx={ctx} />
         </div>
       </div>
     </div>

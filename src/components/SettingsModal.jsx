@@ -7,9 +7,16 @@ const FIELDS = [
   ['exerciseMinutes', 'Exercise minimum', 'min', 5],
   ['deepWorkMinutes', 'Focus block length', 'min', 5],
   ['sleepMinHours', 'Minimum sleep', 'h', 0.5],
+  ['weeklyImpulseBudget', 'Weekly impulse cap', '\u20b1', 50],
+  ['coolOffHours', 'Cooling-off time', 'h', 1],
 ];
 
-export default function SettingsModal({ settings, startDate, onSave, onClose }) {
+const TEXT_FIELDS = [
+  ['focusKeywords', 'Calendar events that count as focus'],
+  ['exerciseKeywords', 'Calendar events that count as exercise'],
+];
+
+export default function SettingsModal({ settings, startDate, onSave, onClose, onOpenCalendar }) {
   const [form, setForm] = useState(settings);
   const [start, setStart] = useState(startDate);
   const [saving, setSaving] = useState(false);
@@ -52,6 +59,23 @@ export default function SettingsModal({ settings, startDate, onSave, onClose }) 
               </span>
             </label>
           ))}
+
+          {TEXT_FIELDS.map(([key, label]) => (
+            <label key={key} className="block text-sm text-slate-300">
+              {label}
+              <input
+                value={form[key]}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                className="mt-1 h-12 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-base focus:border-emerald-400 focus:outline-none"
+              />
+              <span className="text-xs text-slate-500">Comma-separated words matched in the event title.</span>
+            </label>
+          ))}
+
+          <button onClick={onOpenCalendar} className="flex h-12 w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 text-sm">
+            <span className="text-slate-300">Google Calendar</span>
+            <span className="text-slate-400">{settings.calendarIds.length ? `${settings.calendarIds.length} connected` : 'Not connected'} &rsaquo;</span>
+          </button>
 
           <label className="flex items-center justify-between gap-3 text-sm">
             <span className="text-slate-300">Start date (Day 1)</span>
